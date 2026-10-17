@@ -1,0 +1,2 @@
+docker build -t noise-remover-bot .
+docker run -d --name noise-remover-bot noise-remover-bot
