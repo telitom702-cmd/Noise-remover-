@@ -5,7 +5,7 @@
 # TELEGRAM BOT CONFIGURATION
 # =====================================
 
-TELEGRAM_BOT_TOKEN = "PASTE_YOUR_BOT_TOKEN_HERE"
+TELEGRAM_BOT_TOKEN = ""
 
 
 # =====================================
