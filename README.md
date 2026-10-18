@@ -78,6 +78,45 @@ Use the included Dockerfile on platforms that support Docker, or install the
 Python requirements and FFmpeg on a Python host. The HTTP endpoint is for
 platform health checks; video uploads and results still go through Telegram.
 
+## VPS deployment with Docker Compose
+
+After the pull request is merged, use an Ubuntu or Debian VPS with Docker
+Engine and the Compose plugin installed. A starting size of 4 vCPU and 8 GB
+RAM is recommended for CPU-based Demucs; shorter videos may work on smaller
+machines but will process more slowly.
+
+```sh
+git clone https://github.com/telitom702-cmd/Noise-remover-.git
+cd Noise-remover-
+cp .env.example .env
+nano .env
+```
+
+Set `TELEGRAM_BOT_TOKEN` in `.env`, save it, then start the service:
+
+```sh
+docker compose up --build -d
+docker compose ps
+curl -fsS http://127.0.0.1:8080/health
+docker compose logs -f --tail=100
+```
+
+Compose binds the health endpoint to `127.0.0.1`, so port `8080` is not
+published on the VPS's public network interface. No inbound app port is needed
+for Telegram polling; keep SSH access restricted as usual. The model cache is
+stored in a Docker volume and survives container rebuilds. Run one instance
+per bot token.
+
+To update after a new version is merged:
+
+```sh
+git pull --ff-only
+docker compose up --build -d
+```
+
+Stop the bot with `docker compose down`. Do not delete the `demucs-cache`
+volume unless you also want to remove the downloaded model.
+
 ## Configuration
 
 | Variable | Default | Purpose |
