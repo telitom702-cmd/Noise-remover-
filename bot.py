@@ -274,12 +274,10 @@ async def handle_other_message(
 
 
 def main() -> None:
-    if (
-        not TELEGRAM_BOT_TOKEN
-        or TELEGRAM_BOT_TOKEN == "PASTE_YOUR_BOT_TOKEN_HERE"
-    ):
+    if not TELEGRAM_BOT_TOKEN:
         raise RuntimeError(
-            "config.py ফাইলে TELEGRAM_BOT_TOKEN সেট করুন।"
+            "TELEGRAM_BOT_TOKEN environment variable সেট করুন "
+            "অথবা .env ফাইলে সেট করুন।"
         )
 
     logging.basicConfig(

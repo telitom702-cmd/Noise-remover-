@@ -1,0 +1,12 @@
+services:
+  noise-remover:
+    build: .
+    env_file:
+      - .env
+    init: true
+    restart: unless-stopped
+    volumes:
+      - demucs-cache:/home/app/.cache/torch
+
+volumes:
+  demucs-cache:

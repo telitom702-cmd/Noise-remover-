@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import shutil
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -28,11 +30,29 @@ class MediaInfo:
 
 def parse_probe_json(raw: str, fallback_size_bytes: int = 0) -> MediaInfo:
     try:
-        payload: dict[str, Any] = json.loads(raw)
-        format_info = payload.get("format", {})
-        duration = float(format_info.get("duration", 0))
-        size = int(format_info.get("size") or fallback_size_bytes)
-        streams = payload.get("streams", [])
+        payload: Any = json.loads(raw)
+        if not isinstance(payload, dict):
+            raise TypeError("probe response must be an object")
+
+        format_info = payload.get("format") or {}
+        streams = payload.get("streams") or []
+        if not isinstance(format_info, dict) or not isinstance(streams, list):
+            raise TypeError("probe format and streams have invalid types")
+        if any(not isinstance(stream, dict) for stream in streams):
+            raise TypeError("probe stream has an invalid type")
+
+        duration = float(format_info.get("duration") or 0)
+        if not math.isfinite(duration) or duration < 0:
+            raise ValueError("probe duration is invalid")
+
+        raw_size = format_info.get("size")
+        size = (
+            int(raw_size)
+            if raw_size not in (None, "")
+            else int(fallback_size_bytes)
+        )
+        if size < 0:
+            raise ValueError("probe size is invalid")
     except (TypeError, ValueError, json.JSONDecodeError) as exc:
         raise MediaProcessingError("ffprobe returned invalid media information") from exc
 
@@ -55,8 +75,10 @@ def validate_media(
         raise InputValidationError("ফাইলে ভিডিও ট্র্যাক পাওয়া যায়নি।")
     if not media.has_audio:
         raise InputValidationError("ভিডিওতে অডিও ট্র্যাক নেই।")
-    if media.duration_seconds <= 0:
+    if not math.isfinite(media.duration_seconds) or media.duration_seconds <= 0:
         raise InputValidationError("ভিডিওর দৈর্ঘ্য পড়া যায়নি।")
+    if media.size_bytes < 0:
+        raise InputValidationError("ভিডিওর ফাইল সাইজ পড়া যায়নি।")
     if media.size_bytes > max_size_bytes:
         max_mb = max_size_bytes // (1024 * 1024)
         raise InputValidationError(f"ভিডিওটি {max_mb} MB সীমার চেয়ে বড়।")
@@ -73,6 +95,15 @@ def _require_tool(name: str) -> str:
             f"Required system tool '{name}' is not installed. Install FFmpeg."
         )
     return path
+
+
+def _remaining_timeout(deadline: float, *, cap: int | None = None) -> int:
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise MediaProcessingError("Video processing exceeded its time limit")
+
+    seconds = max(1, math.ceil(remaining))
+    return min(seconds, cap) if cap is not None else seconds
 
 
 def _run(
@@ -104,7 +135,7 @@ def _run(
     return result
 
 
-def probe_media(path: Path) -> MediaInfo:
+def probe_media(path: Path, *, timeout_seconds: int = 60) -> MediaInfo:
     ffprobe = _require_tool("ffprobe")
     try:
         fallback_size = path.stat().st_size
@@ -125,7 +156,7 @@ def probe_media(path: Path) -> MediaInfo:
             str(path),
         ],
         purpose="Video inspection",
-        timeout_seconds=60,
+        timeout_seconds=timeout_seconds,
     )
     return parse_probe_json(result.stdout, fallback_size_bytes=fallback_size)
 
@@ -138,7 +169,13 @@ def _run_demucs(
 ) -> Path:
     model = os.getenv("DEMUCS_MODEL", "htdemucs").strip() or "htdemucs"
     device = os.getenv("DEMUCS_DEVICE", "cpu").strip() or "cpu"
-    shifts = max(1, min(10, int(os.getenv("DEMUCS_SHIFTS", "1"))))
+    try:
+        shifts = int(os.getenv("DEMUCS_SHIFTS", "1"))
+    except ValueError as exc:
+        raise MediaProcessingError(
+            "DEMUCS_SHIFTS must be an integer between 1 and 10"
+        ) from exc
+    shifts = max(1, min(10, shifts))
     threads = max(1, min(4, os.cpu_count() or 1))
 
     env = os.environ.copy()
@@ -268,7 +305,11 @@ def process_video(
 ) -> None:
     input_path = Path(input_path)
     output_path = Path(output_path)
-    media = probe_media(input_path)
+    deadline = time.monotonic() + timeout_seconds
+    media = probe_media(
+        input_path,
+        timeout_seconds=_remaining_timeout(deadline, cap=60),
+    )
     validate_media(
         media,
         max_size_bytes=max_input_bytes,
@@ -277,6 +318,7 @@ def process_video(
 
     ffmpeg = _require_tool("ffmpeg")
     work_dir = output_path.parent
+    work_dir.mkdir(parents=True, exist_ok=True)
     source_audio = work_dir / "source-audio.wav"
     separation_dir = work_dir / "separated"
     vocals = work_dir / "voice-stem.wav"
@@ -303,22 +345,26 @@ def process_video(
             str(source_audio),
         ],
         purpose="Audio extraction",
-        timeout_seconds=timeout_seconds,
+        timeout_seconds=_remaining_timeout(deadline),
     )
 
     vocals = _run_demucs(
         source_audio,
         separation_dir,
-        timeout_seconds=timeout_seconds,
+        timeout_seconds=_remaining_timeout(deadline),
     )
-    _clean_vocal_track(vocals, clean_audio, timeout_seconds=timeout_seconds)
+    _clean_vocal_track(
+        vocals,
+        clean_audio,
+        timeout_seconds=_remaining_timeout(deadline),
+    )
 
     try:
         _mux_video(
             input_path,
             clean_audio,
             output_path,
-            timeout_seconds=timeout_seconds,
+            timeout_seconds=_remaining_timeout(deadline),
             reencode_video=False,
         )
     except MediaProcessingError:
@@ -328,7 +374,7 @@ def process_video(
             input_path,
             clean_audio,
             output_path,
-            timeout_seconds=timeout_seconds,
+            timeout_seconds=_remaining_timeout(deadline),
             reencode_video=True,
         )
 
