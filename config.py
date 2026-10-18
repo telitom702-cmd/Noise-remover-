@@ -49,6 +49,7 @@ PROCESSING_TIMEOUT_SECONDS = _positive_int_env(
 MAX_CONCURRENT_PROCESSING = _positive_int_env(
     "MAX_CONCURRENT_PROCESSING", 1
 )
+PORT = _positive_int_env("PORT", 8080)
 
 
 # =====================================

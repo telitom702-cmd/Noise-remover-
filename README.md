@@ -8,6 +8,7 @@ Demucs model and can take a while.
 ## Recommended: run with Docker
 
 Docker is the same setup on Windows, macOS, and Linux and includes FFmpeg.
+The bot also exposes an HTTP health endpoint for web-service hosting.
 
 1. Install Docker Desktop (Windows/macOS) or Docker Engine and the Compose
    plugin (Linux).
@@ -22,7 +23,8 @@ Docker is the same setup on Windows, macOS, and Linux and includes FFmpeg.
    ```
 
    Stop it with `docker compose down`. The named Docker volume preserves the
-   downloaded model between container runs.
+   downloaded model between container runs. Open `http://localhost:8080/health`
+   to confirm the web service is responding.
 
 ## Run directly on your computer
 
@@ -59,11 +61,29 @@ python bot.py
 The `.env` file is loaded automatically. Never commit it or paste the token
 into chat.
 
+## Deploy as a web service
+
+This keeps the existing Telegram interface and adds an HTTP endpoint for
+hosting platforms that expect a web process:
+
+- Start command: `python bot.py`
+- Secret environment variable: `TELEGRAM_BOT_TOKEN`
+- Listening address: `0.0.0.0:$PORT` (`PORT` defaults to `8080`)
+- Health-check path: `/health` (returns HTTP 200 and JSON while the process is
+  running)
+- Run exactly one instance for a bot token; Telegram long polling cannot be
+  shared by multiple replicas.
+
+Use the included Dockerfile on platforms that support Docker, or install the
+Python requirements and FFmpeg on a Python host. The HTTP endpoint is for
+platform health checks; video uploads and results still go through Telegram.
+
 ## Configuration
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `TELEGRAM_BOT_TOKEN` | (required) | Token from BotFather |
+| `PORT` | `8080` | HTTP port used by the web-service health endpoint |
 | `MAX_VIDEO_MB` | `20` | Maximum uploaded video size |
 | `MAX_VIDEO_SECONDS` | `300` | Maximum video duration |
 | `MAX_OUTPUT_MB` | `49` | Maximum output size sent by the bot |

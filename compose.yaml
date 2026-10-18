@@ -5,6 +5,8 @@ services:
       - .env
     init: true
     restart: unless-stopped
+    ports:
+      - "${PORT:-8080}:${PORT:-8080}"
     volumes:
       - demucs-cache:/home/app/.cache/torch
 
