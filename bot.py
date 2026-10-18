@@ -25,6 +25,7 @@ from config import (
     MAX_OUTPUT_MB,
     PROCESSING_TIMEOUT_SECONDS,
     MAX_CONCURRENT_PROCESSING,
+    PORT,
     WELCOME_TEXT,
     HELP_TEXT,
 )
@@ -34,6 +35,7 @@ from audio_processor import (
     MediaProcessingError,
     process_video,
 )
+from health_server import start_health_server, stop_health_server
 
 
 LOGGER = logging.getLogger("noise_remover_bot")
@@ -274,12 +276,10 @@ async def handle_other_message(
 
 
 def main() -> None:
-    if (
-        not TELEGRAM_BOT_TOKEN
-        or TELEGRAM_BOT_TOKEN == "PASTE_YOUR_BOT_TOKEN_HERE"
-    ):
+    if not TELEGRAM_BOT_TOKEN:
         raise RuntimeError(
-            "config.py ফাইলে TELEGRAM_BOT_TOKEN সেট করুন।"
+            "TELEGRAM_BOT_TOKEN environment variable সেট করুন "
+            "অথবা .env ফাইলে সেট করুন।"
         )
 
     logging.basicConfig(
@@ -319,11 +319,16 @@ def main() -> None:
         )
     )
 
+    health_server, health_thread = start_health_server(PORT)
+    LOGGER.info("Health endpoint listening on 0.0.0.0:%s/health", PORT)
     LOGGER.info("Telegram noise-removal bot is starting")
 
-    application.run_polling(
-        allowed_updates=Update.ALL_TYPES
-    )
+    try:
+        application.run_polling(
+            allowed_updates=Update.ALL_TYPES
+        )
+    finally:
+        stop_health_server(health_server, health_thread)
 
 
 if __name__ == "__main__":

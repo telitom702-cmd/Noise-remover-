@@ -1,0 +1,14 @@
+services:
+  noise-remover:
+    build: .
+    env_file:
+      - .env
+    init: true
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${PORT:-8080}:${PORT:-8080}"
+    volumes:
+      - demucs-cache:/home/app/.cache/torch
+
+volumes:
+  demucs-cache:

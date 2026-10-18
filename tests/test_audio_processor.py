@@ -5,6 +5,7 @@ from audio_processor import (
     InputValidationError,
     MediaInfo,
     MediaProcessingError,
+    _remaining_timeout,
     parse_probe_json,
     validate_media,
 )
@@ -34,6 +35,31 @@ class ParseProbeJsonTests(unittest.TestCase):
     def test_rejects_invalid_probe_output(self):
         with self.assertRaises(MediaProcessingError):
             parse_probe_json("not json")
+
+    def test_rejects_non_object_probe_output(self):
+        with self.assertRaises(MediaProcessingError):
+            parse_probe_json("[]")
+
+    def test_rejects_non_finite_duration(self):
+        payload = {
+            "format": {"duration": "NaN", "size": "100"},
+            "streams": [{"codec_type": "video"}, {"codec_type": "audio"}],
+        }
+
+        with self.assertRaises(MediaProcessingError):
+            parse_probe_json(json.dumps(payload))
+
+    def test_rejects_malformed_stream_list(self):
+        payload = {"format": {"duration": "3"}, "streams": [None]}
+
+        with self.assertRaises(MediaProcessingError):
+            parse_probe_json(json.dumps(payload))
+
+
+class ProcessingDeadlineTests(unittest.TestCase):
+    def test_rejects_an_expired_processing_deadline(self):
+        with self.assertRaises(MediaProcessingError):
+            _remaining_timeout(0)
 
 
 class ValidateMediaTests(unittest.TestCase):
