@@ -144,3 +144,38 @@ Run the standard-library unit tests with:
 ```sh
 python -m unittest discover -s tests -v
 ```
+
+## Deploy on Replit
+
+Import this GitHub repository into Replit, then publish it as a **Reserved VM**
+deployment. Telegram long polling must keep running continuously, and this bot
+should run as one instance per token; do not choose Autoscale or multiple
+replicas.
+
+Replit uses its own environment configuration rather than this repository's
+Dockerfile. Add FFmpeg and libsndfile to the Replit system packages; the
+equivalent `replit.nix` entries are:
+
+```nix
+{ pkgs }: {
+  deps = [
+    pkgs.python311
+    pkgs.ffmpeg
+    pkgs.libsndfile
+  ];
+}
+```
+
+In the Replit Shell, install the Python packages with
+`python -m pip install -r requirements.txt`. In **Secrets**, add
+`TELEGRAM_BOT_TOKEN`; do not commit the token or put it in chat. In the
+deployment settings use:
+
+- Deployment type: **Reserved VM**
+- Build command: `python -m pip install -r requirements.txt`
+- Run command: `python bot.py`
+
+The app listens on Replit's `PORT` and serves `/health`. See Replit's
+[deployment types](https://docs.replit.com/features/publishing/deployment-types),
+[GitHub import guide](https://docs.replit.com/build/import-from-providers), and
+[Secrets guide](https://docs.replit.com/core-concepts/project-editor/app-setup/secrets).
